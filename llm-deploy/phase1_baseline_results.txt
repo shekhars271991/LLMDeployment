@@ -1,0 +1,112 @@
+PHASE 1 — QWEN3-32B AWQ BASELINE RESULTS
+
+Status: Complete
+Run timestamp (UTC): 2026-07-19 06:01:41
+
+CONFIGURATION
+
+Model: Qwen3-32B AWQ (INT4)
+Serving engine: vLLM 0.25.1
+GPU: 1x NVIDIA L40S, 46,068 MiB
+Tensor parallel size: 1
+Maximum model length: 16,384 tokens
+GPU memory utilization setting: 0.90
+Input lengths: 256, 2,048, and 8,000 tokens
+Maximum output length: 256 tokens
+Prompts per input length: 8
+Concurrency: 1 (sequential)
+Thinking mode: disabled
+Prefix caching: disabled
+
+RESULTS
+
+Input tokens | Requests | Mean TTFT | Median TTFT | Mean decode | Median decode | Peak VRAM
+256          | 8        | 104.6 ms  | 102.6 ms    | 37.1 tok/s  | 37.1 tok/s    | 42,927 MiB
+2,048        | 8        | 757.1 ms  | 755.1 ms    | 36.3 tok/s  | 36.2 tok/s    | 43,127 MiB
+8,000        | 8        | 3,362.3 ms| 3,363.6 ms  | 33.7 tok/s  | 33.6 tok/s    | 43,127 MiB
+
+Source artifacts:
+- remote/results/bench_20260719T060141Z.json
+- remote/results/summary_20260719T060411Z.txt
+- remote/records/20260719T060141Z_bench.log
+- remote/records/20260719T060411Z_summarize.log
+
+WHAT THE METRICS MEAN
+
+TTFT (time to first token):
+Elapsed time from sending a request until the first generated content token
+arrives. It includes input prefill and request/API overhead. At concurrency one,
+queueing should be negligible.
+
+Decode tokens per second:
+Generation speed after the first output token. The calculation excludes the
+first token because its latency is represented by TTFT.
+
+Peak VRAM:
+Highest GPU memory usage observed by nvidia-smi while each request was running.
+It includes model weights, KV cache, vLLM allocations, and CUDA/runtime
+overhead visible at the device level.
+
+INTERPRETATION
+
+- TTFT rises strongly with input length because more input tokens must be
+  processed during prefill.
+- Median TTFT increased from 102.6 ms at 256 tokens to 3,363.6 ms at 8,000
+  tokens, approximately 32.8 times higher for 31.25 times as many tokens.
+- Decode speed decreased from 37.1 tok/s to 33.6 tok/s as input length grew.
+  Decoding attends over a larger KV cache at longer contexts.
+- Peak observed VRAM was 43,127 MiB, leaving limited headroom on this L40S
+  configuration.
+- Means and medians are close at every input length, showing consistent
+  sequential measurements without large latency outliers.
+
+BASELINE VALIDITY CRITERIA
+
+The phase is considered complete because:
+
+- The model loaded and served successfully on one L40S.
+- All 24 requests completed without reported errors.
+- vLLM reported the exact intended input-token count for every request.
+- Prefix caching was explicitly disabled, so repeated cached prefill did not
+  reduce TTFT.
+- Each input length used the same eight prompt cases and maximum output limit.
+- Concurrency remained fixed at one.
+- TTFT, decode speed, VRAM, configuration, and raw output were recorded.
+
+LEARNINGS
+
+1. Prefix caching can invalidate a cold-prefill benchmark.
+   The first attempt placed identical padding at the beginning of requests.
+   vLLM reused those cached prefix blocks, making most TTFT values artificially
+   low. The corrected server explicitly disables prefix caching.
+
+2. Character counts are not token counts.
+   Four characters per token was only an approximation and produced actual
+   inputs of roughly 192, 1,430, and 5,530 tokens. The corrected benchmark uses
+   vLLM's /tokenize endpoint and verifies exact lengths.
+
+3. Prefill and decoding respond differently to context length.
+   TTFT increased roughly in proportion to input length, while decode speed
+   declined more gradually.
+
+4. A default vLLM baseline still uses optimized inference kernels.
+   This baseline excludes optional cross-request prefix reuse and speculative
+   decoding, but retains vLLM's normal kernels and execution engine. Disabling
+   all low-level GPU optimizations would not represent normal vLLM deployment.
+
+5. This is a single-request latency baseline, not a load test.
+   Concurrency one isolates latency. It does not measure aggregate throughput,
+   queueing, or behavior under concurrent production traffic.
+
+LIMITATIONS AND NEXT COMPARISON RULES
+
+- Some responses may stop before 256 output tokens because 256 is a maximum,
+  not a forced output length.
+- The padding is synthetic, so these results isolate token-length effects but
+  do not represent every real workload.
+- Only one benchmark run was summarized; repeated runs are needed for
+  confidence intervals and run-to-run variance.
+- Keep model, prompts, input lengths, output policy, concurrency, and prefix
+  caching behavior fixed when comparing speculative decoding.
+- Measure prefix caching separately as its own optimization rather than mixing
+  cached and uncached requests in one aggregate.
