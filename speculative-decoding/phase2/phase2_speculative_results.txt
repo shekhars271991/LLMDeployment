@@ -1,0 +1,231 @@
+PHASE 2 — QWEN3-32B AWQ SPECULATIVE DECODING COMPARISON
+
+Status: Complete
+Run date (UTC): 2026-07-19
+
+OBJECTIVE
+
+Compare a normal vLLM control against n-gram prompt lookup at depths 2, 4, and
+8, plus Qwen3-0.6B draft-model speculation with five proposed tokens.
+
+CONFIGURATION
+
+Target model: Qwen3-32B AWQ (INT4)
+Draft model: Qwen3-0.6B (FP16)
+Serving engine: vLLM 0.25.1
+GPU: 1x NVIDIA L40S, 46,068 MiB
+Tensor parallel size: 1
+Maximum model length: 16,384 tokens
+GPU memory utilization setting: 0.90
+Input lengths: 256, 2,048, and 8,000 tokens
+Maximum output length: 256 tokens
+Prompts per input length: 9
+Prompt cohorts: high reuse, medium reuse, and low reuse (3 prompts each)
+Runs per mode: 3
+Requests per mode: 81
+Total measured requests: 405
+Concurrency: 1 (sequential)
+Temperature: 0.0
+Thinking mode: disabled
+Prefix caching: disabled
+
+MODES
+
+control: No speculative decoding
+ngram-2: Prompt lookup with 2 speculative tokens
+ngram-4: Prompt lookup with 4 speculative tokens
+ngram-8: Prompt lookup with 8 speculative tokens
+draft: Qwen3-0.6B proposing 5 tokens for Qwen3-32B verification
+
+SPECULATIVE ACCEPTANCE
+
+Mode     | Runs | Median drafted | Median accepted | Acceptance rate | Mean accepted length
+ngram-2  | 3    | 972            | 510             | 52.47%          | 2.05 tokens
+ngram-4  | 3    | 1,588          | 601             | 37.85%          | 2.51 tokens
+ngram-8  | 3    | 2,769          | 650             | 23.47%          | 2.87 tokens
+draft    | 3    | 3,935          | 1,786           | 45.39%          | 3.27 tokens
+
+The n-gram acceptance rate declined with depth, but accepted sequence length
+increased. The draft model accepted substantially more tokens per run than any
+n-gram mode.
+
+OVERALL RESULTS BY INPUT LENGTH
+
+Each row summarizes 27 measurements: 9 prompts across 3 runs. Decode speedup is
+relative to the control median at the same input length.
+
+Mode     | Input | Median TTFT | Median decode | Decode speedup | Peak VRAM
+control  | 256   | 101.9 ms    | 37.22 tok/s   | baseline       | 43,125 MiB
+control  | 2,048 | 747.6 ms    | 36.41 tok/s   | baseline       | 43,125 MiB
+control  | 8,000 | 3,361.8 ms  | 33.78 tok/s   | baseline       | 43,125 MiB
+ngram-2  | 256   | 117.6 ms    | 44.57 tok/s   | +19.8%         | 41,697 MiB
+ngram-2  | 2,048 | 751.9 ms    | 40.79 tok/s   | +12.0%         | 41,697 MiB
+ngram-2  | 8,000 | 3,352.0 ms  | 36.54 tok/s   | +8.2%          | 41,697 MiB
+ngram-4  | 256   | 117.8 ms    | 46.33 tok/s   | +24.5%         | 41,297 MiB
+ngram-4  | 2,048 | 746.4 ms    | 41.56 tok/s   | +14.2%         | 41,297 MiB
+ngram-4  | 8,000 | 3,362.4 ms  | 38.92 tok/s   | +15.2%         | 41,297 MiB
+ngram-8  | 256   | 117.7 ms    | 47.12 tok/s   | +26.6%         | 41,611 MiB
+ngram-8  | 2,048 | 743.9 ms    | 42.35 tok/s   | +16.3%         | 41,611 MiB
+ngram-8  | 8,000 | 3,359.8 ms  | 39.41 tok/s   | +16.7%         | 41,611 MiB
+draft    | 256   | 148.7 ms    | 75.05 tok/s   | +101.7%        | 41,481 MiB
+draft    | 2,048 | 830.1 ms    | 74.93 tok/s   | +105.8%        | 41,481 MiB
+draft    | 8,000 | 3,497.2 ms  | 64.28 tok/s   | +90.3%         | 41,481 MiB
+
+COHORT-LEVEL DECODE SPEEDUP
+
+NGRAM-2
+
+Cohort       | 256 tokens | 2,048 tokens | 8,000 tokens
+high_reuse   | +94.2%     | +85.7%       | +90.8%
+medium_reuse | -5.9%      | -6.8%        | -7.8%
+low_reuse    | +19.8%     | +5.8%        | +8.4%
+
+NGRAM-4
+
+Cohort       | 256 tokens | 2,048 tokens | 8,000 tokens
+high_reuse   | +136.5%    | +128.9%      | +192.6%
+medium_reuse | -6.2%      | -7.5%        | -7.7%
+low_reuse    | +24.6%     | +7.5%        | +15.5%
+
+NGRAM-8
+
+Cohort       | 256 tokens | 2,048 tokens | 8,000 tokens
+high_reuse   | +206.3%    | +195.9%      | +287.8%
+medium_reuse | -6.8%      | -8.1%        | -8.3%
+low_reuse    | +26.7%     | +7.5%        | +16.9%
+
+DRAFT MODEL
+
+Cohort       | 256 tokens | 2,048 tokens | 8,000 tokens
+high_reuse   | +121.8%    | +125.0%      | +113.2%
+medium_reuse | +11.5%     | +8.7%        | -15.4%
+low_reuse    | +3.0%      | +16.6%       | +27.3%
+
+BEST MODE FOR EACH COHORT AND INPUT LENGTH
+
+Cohort       | Input | Best mode | Decode result | Change from control
+high_reuse   | 256   | ngram-8   | 114.06 tok/s | +206.3%
+high_reuse   | 2,048 | ngram-8   | 107.78 tok/s | +195.9%
+high_reuse   | 8,000 | ngram-8   | 131.08 tok/s | +287.8%
+medium_reuse | 256   | draft     | 41.52 tok/s  | +11.5%
+medium_reuse | 2,048 | draft     | 39.57 tok/s  | +8.7%
+medium_reuse | 8,000 | control   | 33.80 tok/s  | baseline
+low_reuse    | 256   | ngram-8   | 47.12 tok/s  | +26.7%
+low_reuse    | 2,048 | draft     | 42.34 tok/s  | +16.6%
+low_reuse    | 8,000 | draft     | 42.92 tok/s  | +27.3%
+
+KEY FINDINGS
+
+1. There is no universally best speculative method.
+
+   Ngram-8 dominated the high-reuse cohort, while the draft model had the best
+   aggregate median and performed well on extraction and arithmetic. Control
+   remained best for the medium-reuse cohort at 8,000 tokens.
+
+2. N-gram performance is highly dependent on reusable token sequences.
+
+   High-reuse speedups increased with n-gram depth and reached +287.8%.
+   Medium-reuse prompts slowed by approximately 6% to 8% at every depth.
+
+3. Lower acceptance rate does not necessarily mean lower throughput.
+
+   Ngram-8 had the lowest token acceptance rate at 23.47%, yet it delivered the
+   fastest n-gram decode performance because successful proposals accepted
+   longer sequences and high-reuse prompts benefited from deeper lookahead.
+
+4. The draft model produced broader but still uneven gains.
+
+   Its aggregate median decode speed improved by 90% to 106%. Copying, code,
+   extraction, and arithmetic gained strongly, while creative writing and
+   formal rewriting slowed down.
+
+5. Speculation affects TTFT differently by method.
+
+   N-gram TTFT was about 16 ms above control at 256 tokens and nearly unchanged
+   at longer contexts. Draft-model TTFT was approximately 47 to 135 ms higher
+   because the additional model and V1 speculative path add overhead.
+
+6. Workload routing is more promising than enabling one method globally.
+
+   Based on this small prompt set, ngram-8 is a strong choice for copying and
+   repeated/templated output. Draft speculation is attractive for extraction,
+   arithmetic, and longer structured responses. Control may be preferable for
+   creative or rewrite workloads with poor speculative efficiency.
+
+OPERATIONAL TRADE-OFFS
+
+N-gram:
+- Requires no additional model weights or training.
+- Adds little TTFT at medium and long input lengths.
+- Can substantially slow workloads without useful token reuse.
+- Deeper lookup increases proposal work and lowers token acceptance rate.
+
+Draft model:
+- Requires loading and executing an additional 0.6B model.
+- Used approximately 41,481 MiB peak VRAM and fit on the L40S without OOM.
+- Forced vLLM's V1 runner and disabled async scheduling in vLLM 0.25.1.
+- Added more TTFT than n-gram speculation.
+- Delivered the highest aggregate decode medians in this benchmark.
+
+VALIDITY AND PROVENANCE
+
+- Every mode used three complete benchmark runs.
+- Each mode completed 81 requests: 9 prompts at 3 input lengths across 3 runs.
+- All 405 measured requests completed without a benchmark error.
+- Every request used an exact input length of 256, 2,048, or 8,000 tokens.
+- Prefix caching was disabled to prevent cross-request prefill reuse.
+- Temperature, output limit, prompts, context lengths, and concurrency were
+  held constant.
+- Server launch records were checked against result labels and configuration.
+- Three initial ngram-4 files were mislabeled ngram-2 during collection. Their
+  server record proved depth 4 was active, and both filenames and internal
+  labels were corrected before analysis.
+- Stale embedded depth metadata in the later ngram-2 and ngram-8 JSON files was
+  corrected to match their verified server launch configurations.
+- Draft filenames and embedded configuration matched the draft server record
+  without correction.
+
+LIMITATIONS
+
+- This is a sequential latency benchmark, not a load test. It does not measure
+  aggregate throughput, queueing, or behavior with concurrent users.
+- The nine prompts are a small synthetic workload and do not establish a
+  universal production routing policy.
+- Cohort labels describe expected reuse, but individual prompts within a
+  cohort behaved differently.
+- Some responses stopped before 256 output tokens because 256 was a maximum,
+  not a forced output length.
+- Very short completions make decode-rate measurements sensitive to timing
+  overhead.
+- Acceptance counters are aggregated per run, not per prompt or cohort.
+- The first request after each speculative server launch included warm-up
+  overhead. Three runs and cohort medians reduce its influence.
+- End-to-end user latency depends on both TTFT and output length; decode tok/s
+  alone does not determine which mode is best for short responses.
+
+SOURCE ARTIFACTS
+
+Control:
+- remote/results/bench_control_20260719T064553Z.json
+- remote/results/bench_control_20260719T064940Z.json
+- remote/results/bench_control_20260719T065216Z.json
+
+Ngram-2:
+- remote/results/bench_ngram-2_20260719T113842Z.json
+- remote/results/bench_ngram-2_20260719T114054Z.json
+- remote/results/bench_ngram-2_20260719T114304Z.json
+
+Ngram-4:
+- remote/results/bench_ngram-4_20260719T070323Z.json
+- remote/results/bench_ngram-4_20260719T112804Z.json
+- remote/results/bench_ngram-4_20260719T113018Z.json
+
+Ngram-8:
+- remote/results/bench_ngram-8_20260719T114908Z.json
+- remote/results/bench_ngram-8_20260719T115122Z.json
+- remote/results/bench_ngram-8_20260719T115332Z.json
+
+Draft:
+- remote/results/bench_draft_20260719T120400Z.json
+- remote/results/bench_draft_20260719T120605Z.json
+- remote/results/bench_draft_20260719T120809Z.json

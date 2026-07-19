@@ -1,0 +1,125 @@
+PHASE 2 — QWEN3-32B AWQ DRAFT-MODEL SPECULATIVE DECODING RESULTS
+
+Status: Complete
+Run date (UTC): 2026-07-19
+
+CONFIGURATION
+
+Target model: Qwen3-32B AWQ (INT4)
+Draft model: Qwen3-0.6B (FP16)
+Serving engine: vLLM 0.25.1
+GPU: 1x NVIDIA L40S, 46,068 MiB
+Target tensor parallel size: 1
+Draft tensor parallel size: 1
+Speculative tokens per proposal: 5
+Maximum target model length: 16,384 tokens
+GPU memory utilization setting: 0.90
+Input lengths: 256, 2,048, and 8,000 tokens
+Maximum output length: 256 tokens
+Prompts per input length: 9
+Prompt cohorts: high reuse, medium reuse, and low reuse (3 prompts each)
+Runs: 3
+Concurrency: 1 (sequential)
+Temperature: 0.0
+Thinking mode: disabled
+Prefix caching: disabled
+Draft-model runner: vLLM V1 (V2 did not support this method in v0.25.1)
+Async scheduling: disabled by vLLM for draft-model speculation
+
+SPECULATIVE ACCEPTANCE
+
+Median drafted tokens per run: 3,935
+Median accepted tokens per run: 1,786
+Median token acceptance rate: 45.39%
+Median accepted sequence length: 3.27 tokens
+
+OVERALL RESULTS BY INPUT LENGTH
+
+Each row summarizes 27 measurements: 9 prompts across 3 runs. Decode speedup is
+relative to the control median at the same input length.
+
+Input | Requests | Control TTFT | Draft TTFT | Control decode | Draft decode | Decode speedup | Peak VRAM
+256   | 27       | 101.9 ms     | 148.7 ms   | 37.22 tok/s    | 75.05 tok/s  | +101.7%        | 41,481 MiB
+2,048 | 27       | 747.6 ms     | 830.1 ms   | 36.41 tok/s    | 74.93 tok/s  | +105.8%        | 41,481 MiB
+8,000 | 27       | 3,361.8 ms   | 3,497.2 ms | 33.78 tok/s    | 64.28 tok/s  | +90.3%         | 41,481 MiB
+
+RESULTS BY WORKLOAD COHORT
+
+Cohort        | Input | Control decode | Draft decode | Speedup | Control TTFT | Draft TTFT
+high_reuse    | 256   | 37.23 tok/s    | 82.57 tok/s  | +121.8% | 102.1 ms     | 148.7 ms
+high_reuse    | 2,048 | 36.42 tok/s    | 81.95 tok/s  | +125.0% | 745.5 ms     | 827.1 ms
+high_reuse    | 8,000 | 33.80 tok/s    | 72.06 tok/s  | +113.2% | 3,380.2 ms   | 3,490.8 ms
+medium_reuse  | 256   | 37.22 tok/s    | 41.52 tok/s  | +11.5%  | 101.7 ms     | 148.4 ms
+medium_reuse  | 2,048 | 36.42 tok/s    | 39.57 tok/s  | +8.7%   | 746.7 ms     | 830.1 ms
+medium_reuse  | 8,000 | 33.80 tok/s    | 28.61 tok/s  | -15.4%  | 3,368.5 ms   | 3,528.1 ms
+low_reuse     | 256   | 37.20 tok/s    | 38.30 tok/s  | +3.0%   | 102.2 ms     | 148.9 ms
+low_reuse     | 2,048 | 36.30 tok/s    | 42.34 tok/s  | +16.6%  | 750.4 ms     | 830.8 ms
+low_reuse     | 8,000 | 33.71 tok/s    | 42.92 tok/s  | +27.3%  | 3,352.1 ms   | 3,508.3 ms
+
+PER-PROMPT DECODE RESULTS
+
+Each cell shows median draft-model decode speed and percentage change from
+control. The prompt-level view exposes variation hidden by cohort medians.
+
+Prompt                    | 256 tokens         | 2,048 tokens       | 8,000 tokens
+high_copy_paragraph       | 89.3 (+139.8%)     | 89.2 (+144.9%)     | 84.2 (+149.3%)
+high_code_complete        | 83.0 (+123.0%)     | 81.9 (+125.0%)     | 64.3 (+90.2%)
+high_json_to_lines        | 75.1 (+101.7%)     | 74.9 (+105.5%)     | 72.1 (+112.8%)
+medium_summarize_bullets  | 41.5 (+11.6%)      | 39.6 (+8.7%)       | 28.5 (-15.7%)
+medium_rewrite_formal     | 35.3 (-5.3%)       | 29.9 (-17.8%)      | 28.6 (-15.4%)
+medium_extract_fields     | 84.9 (+128.0%)     | 84.5 (+132.2%)     | 80.9 (+139.2%)
+low_math_word             | 77.8 (+109.2%)     | 78.1 (+115.2%)     | 72.1 (+114.1%)
+low_creative_scene        | 29.3 (-21.3%)      | 30.3 (-16.7%)      | 32.3 (-4.3%)
+low_logic_puzzle          | 38.3 (+3.0%)       | 42.3 (+16.6%)      | 42.9 (+27.3%)
+
+INTERPRETATION
+
+- The draft model nearly doubled the aggregate median decode rate at all three
+  input lengths, with gains from +90.3% to +105.8%.
+- The 45.39% token acceptance rate produced a mean accepted sequence of 3.27
+  tokens per target-model verification step.
+- Structured and predictable tasks benefited most. Copying, code completion,
+  field extraction, and the arithmetic prompt gained approximately 90% to 149%.
+- Benefits were not determined solely by the assigned cohort. Field extraction
+  and arithmetic performed very well, while formal rewriting and creative
+  writing slowed down.
+- The creative prompt lost 4% to 21% decode performance. Its draft proposals
+  did not offset the cost of running the additional 0.6B model.
+- Draft-model TTFT was higher than control by approximately 47 ms at 256 tokens,
+  83 ms at 2,048 tokens, and 135 ms at 8,000 tokens.
+- Draft-model speculation therefore trades higher first-token latency for
+  faster generation. It is most useful when responses are long enough for
+  decode savings to recover the additional TTFT.
+- Peak observed VRAM was 41,481 MiB. The draft weights loaded without OOM on
+  the 48 GB L40S at the 0.90 memory-utilization setting.
+
+VALIDITY CRITERIA
+
+- The server launch log confirms Qwen3-0.6B with five speculative tokens.
+- All three result files record label=draft, the correct draft model, and depth 5.
+- Each run completed 27 requests with no reported benchmark error.
+- Every request used an exact input length of 256, 2,048, or 8,000 tokens.
+- Control and draft runs used the same prompts, output limit, temperature,
+  concurrency, and prefix-caching policy.
+- The first request after server startup showed a warm-up TTFT outlier. Three
+  runs and cohort medians prevent it from determining the reported result.
+
+LIMITATIONS
+
+- This is a sequential latency benchmark, not a concurrent throughput test.
+- The overall median gives every prompt equal weight and may not match a real
+  production workload mix.
+- Some completions ended before 256 output tokens because 256 was a maximum,
+  not a forced output length.
+- Very short completions make decode-rate measurements more sensitive to
+  timing overhead.
+- Speculative acceptance metrics are aggregated across each complete run and
+  are not available per prompt or cohort.
+- Draft-model speculation forced vLLM's V1 runner and disabled async scheduling,
+  so the result includes those implementation differences from control.
+
+SOURCE ARTIFACTS
+
+- remote/results/bench_draft_20260719T120400Z.json
+- remote/results/bench_draft_20260719T120605Z.json
+- remote/results/bench_draft_20260719T120809Z.json

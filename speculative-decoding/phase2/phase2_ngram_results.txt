@@ -1,0 +1,176 @@
+PHASE 2 — QWEN3-32B AWQ N-GRAM SPECULATIVE DECODING RESULTS
+
+Status: N-gram sweep complete; draft-model experiment pending
+Run date (UTC): 2026-07-19
+
+CONFIGURATION
+
+Model: Qwen3-32B AWQ (INT4)
+Serving engine: vLLM 0.25.1
+GPU: 1x NVIDIA L40S, 46,068 MiB
+Tensor parallel size: 1
+Maximum model length: 16,384 tokens
+GPU memory utilization setting: 0.90
+Input lengths: 256, 2,048, and 8,000 tokens
+Maximum output length: 256 tokens
+Prompts per input length: 9
+Prompt cohorts: high reuse, medium reuse, and low reuse (3 prompts each)
+Runs per mode: 3
+Concurrency: 1 (sequential)
+Temperature: 0.0
+Thinking mode: disabled
+Prefix caching: disabled
+
+MODES
+
+control: No speculative decoding
+ngram-2: Prompt lookup with 2 speculative tokens
+ngram-4: Prompt lookup with 4 speculative tokens
+ngram-8: Prompt lookup with 8 speculative tokens
+Prompt lookup range: 2 to 5 tokens
+
+SPECULATIVE ACCEPTANCE
+
+Mode     | Runs | Median drafted | Median accepted | Acceptance rate | Mean accepted length
+ngram-2  | 3    | 972            | 510             | 52.47%          | 2.05 tokens
+ngram-4  | 3    | 1,588          | 601             | 37.85%          | 2.51 tokens
+ngram-8  | 3    | 2,769          | 650             | 23.47%          | 2.87 tokens
+
+Acceptance rate declined as speculation depth increased. Deeper speculation
+nevertheless produced more accepted tokens and a longer accepted sequence per
+verification step.
+
+OVERALL RESULTS BY INPUT LENGTH
+
+Each row summarizes 27 measurements: 9 prompts across 3 runs. Decode speedup is
+relative to the control median at the same input length.
+
+Mode     | Input | Requests | Median TTFT | Median decode | Decode speedup | Peak VRAM
+control  | 256   | 27       | 101.9 ms    | 37.22 tok/s   | baseline       | 43,125 MiB
+control  | 2,048 | 27       | 747.6 ms    | 36.41 tok/s   | baseline       | 43,125 MiB
+control  | 8,000 | 27       | 3,361.8 ms  | 33.78 tok/s   | baseline       | 43,125 MiB
+ngram-2  | 256   | 27       | 117.6 ms    | 44.57 tok/s   | +19.7%         | 41,697 MiB
+ngram-2  | 2,048 | 27       | 751.9 ms    | 40.79 tok/s   | +12.0%         | 41,697 MiB
+ngram-2  | 8,000 | 27       | 3,352.0 ms  | 36.54 tok/s   | +8.2%          | 41,697 MiB
+ngram-4  | 256   | 27       | 117.8 ms    | 46.33 tok/s   | +24.5%         | 41,297 MiB
+ngram-4  | 2,048 | 27       | 746.4 ms    | 41.56 tok/s   | +14.1%         | 41,297 MiB
+ngram-4  | 8,000 | 27       | 3,362.4 ms  | 38.92 tok/s   | +15.2%         | 41,297 MiB
+ngram-8  | 256   | 27       | 117.7 ms    | 47.12 tok/s   | +26.6%         | 41,611 MiB
+ngram-8  | 2,048 | 27       | 743.9 ms    | 42.35 tok/s   | +16.3%         | 41,611 MiB
+ngram-8  | 8,000 | 27       | 3,359.8 ms  | 39.41 tok/s   | +16.7%         | 41,611 MiB
+
+RESULTS BY WORKLOAD COHORT
+
+HIGH REUSE
+
+Mode     | Input | Control decode | Spec decode  | Speedup | Median TTFT
+ngram-2  | 256   | 37.23 tok/s    | 72.31 tok/s  | +94.2%  | 117.6 ms
+ngram-2  | 2,048 | 36.42 tok/s    | 67.64 tok/s  | +85.7%  | 751.4 ms
+ngram-2  | 8,000 | 33.80 tok/s    | 64.50 tok/s  | +90.8%  | 3,359.7 ms
+ngram-4  | 256   | 37.23 tok/s    | 88.06 tok/s  | +136.5% | 117.8 ms
+ngram-4  | 2,048 | 36.42 tok/s    | 83.37 tok/s  | +128.9% | 743.4 ms
+ngram-4  | 8,000 | 33.80 tok/s    | 98.92 tok/s  | +192.6% | 3,361.2 ms
+ngram-8  | 256   | 37.23 tok/s    | 114.06 tok/s | +206.3% | 117.6 ms
+ngram-8  | 2,048 | 36.42 tok/s    | 107.78 tok/s | +195.9% | 739.2 ms
+ngram-8  | 8,000 | 33.80 tok/s    | 131.08 tok/s | +287.8% | 3,362.0 ms
+
+MEDIUM REUSE
+
+Mode     | Input | Control decode | Spec decode | Speedup | Median TTFT
+ngram-2  | 256   | 37.22 tok/s    | 35.03 tok/s | -5.9%   | 117.6 ms
+ngram-2  | 2,048 | 36.42 tok/s    | 33.96 tok/s | -6.8%   | 751.9 ms
+ngram-2  | 8,000 | 33.80 tok/s    | 31.15 tok/s | -7.8%   | 3,352.0 ms
+ngram-4  | 256   | 37.22 tok/s    | 34.92 tok/s | -6.2%   | 117.9 ms
+ngram-4  | 2,048 | 36.42 tok/s    | 33.68 tok/s | -7.5%   | 746.4 ms
+ngram-4  | 8,000 | 33.80 tok/s    | 31.20 tok/s | -7.7%   | 3,370.5 ms
+ngram-8  | 256   | 37.22 tok/s    | 34.68 tok/s | -6.8%   | 117.8 ms
+ngram-8  | 2,048 | 36.42 tok/s    | 33.48 tok/s | -8.1%   | 744.1 ms
+ngram-8  | 8,000 | 33.80 tok/s    | 30.99 tok/s | -8.3%   | 3,393.3 ms
+
+LOW REUSE
+
+Mode     | Input | Control decode | Spec decode | Speedup | Median TTFT
+ngram-2  | 256   | 37.20 tok/s    | 44.57 tok/s | +19.8%  | 117.7 ms
+ngram-2  | 2,048 | 36.30 tok/s    | 38.42 tok/s | +5.8%   | 752.6 ms
+ngram-2  | 8,000 | 33.71 tok/s    | 36.54 tok/s | +8.4%   | 3,336.2 ms
+ngram-4  | 256   | 37.20 tok/s    | 46.33 tok/s | +24.6%  | 117.7 ms
+ngram-4  | 2,048 | 36.30 tok/s    | 39.04 tok/s | +7.5%   | 749.9 ms
+ngram-4  | 8,000 | 33.71 tok/s    | 38.92 tok/s | +15.5%  | 3,361.5 ms
+ngram-8  | 256   | 37.20 tok/s    | 47.12 tok/s | +26.7%  | 117.7 ms
+ngram-8  | 2,048 | 36.30 tok/s    | 39.04 tok/s | +7.5%   | 747.4 ms
+ngram-8  | 8,000 | 33.71 tok/s    | 39.41 tok/s | +16.9%  | 3,355.0 ms
+
+INTERPRETATION
+
+- N-gram speculation was strongly workload dependent. The high-reuse cohort
+  benefited at every depth and context length.
+- Ngram-8 produced the best high-reuse decode performance, ranging from
+  +195.9% to +287.8% at the two longer contexts.
+- The medium-reuse cohort slowed by approximately 6% to 8% in every n-gram
+  mode. Proposal and verification overhead exceeded the value of accepted
+  tokens for these prompts.
+- The low-reuse cohort still showed modest gains, but these were much smaller
+  than the gains for copying, code completion, and structured formatting.
+- Short-context TTFT increased by about 16 ms under n-gram speculation.
+  TTFT at 2,048 and 8,000 tokens remained close to control because prefill work
+  dominates at longer contexts.
+- Deeper speculation reduced token-level acceptance from 52.47% at depth 2 to
+  23.47% at depth 8, while increasing the median accepted-token count from 510
+  to 650. Acceptance rate alone therefore does not determine throughput.
+- Ngram-8 had the best aggregate decode median for this nine-prompt mix, but it
+  is not universally best: medium-reuse prompts were slower than control.
+- Observed n-gram VRAM was lower than control in these runs. This is an
+  observed process-level measurement and should not be treated as a general
+  memory-saving guarantee.
+
+VALIDITY AND PROVENANCE
+
+- All modes used three complete benchmark runs.
+- Every run completed 27 requests: 9 prompts at each of 3 exact input lengths.
+- Prefix caching was disabled to prevent cross-request prefill reuse.
+- Temperature, output limit, prompt set, context lengths, and concurrency were
+  held constant.
+- The first request after each n-gram server launch showed a warm-up TTFT
+  outlier. Three-run cohort medians prevent one first-request outlier from
+  determining the reported result.
+- The original files timestamped 07:03:23, 11:28:04, and 11:30:18 were initially
+  labeled ngram-2, but the corresponding vLLM server log proved that depth 4
+  was active. Their filenames and internal labels were corrected to ngram-4.
+- The later ngram-2 and ngram-8 filenames were verified against their server
+  launch logs. Stale shell metadata embedded in those JSON files was corrected
+  to match the verified server depths.
+
+LIMITATIONS
+
+- The benchmark is sequential and measures single-request latency, not
+  throughput under concurrent production load.
+- Some responses ended before 256 tokens because 256 was a maximum output
+  length, not a forced completion length.
+- Very short completions make decode-rate measurements more sensitive to
+  timing overhead.
+- The prompts and exact-length padding are synthetic and represent selected
+  workload patterns rather than all production traffic.
+- Acceptance metrics are aggregated across the whole run; they are not broken
+  down by individual prompt or cohort.
+
+SOURCE ARTIFACTS
+
+Control:
+- remote/results/bench_control_20260719T064553Z.json
+- remote/results/bench_control_20260719T064940Z.json
+- remote/results/bench_control_20260719T065216Z.json
+
+Ngram-2:
+- remote/results/bench_ngram-2_20260719T113842Z.json
+- remote/results/bench_ngram-2_20260719T114054Z.json
+- remote/results/bench_ngram-2_20260719T114304Z.json
+
+Ngram-4:
+- remote/results/bench_ngram-4_20260719T070323Z.json
+- remote/results/bench_ngram-4_20260719T112804Z.json
+- remote/results/bench_ngram-4_20260719T113018Z.json
+
+Ngram-8:
+- remote/results/bench_ngram-8_20260719T114908Z.json
+- remote/results/bench_ngram-8_20260719T115122Z.json
+- remote/results/bench_ngram-8_20260719T115332Z.json

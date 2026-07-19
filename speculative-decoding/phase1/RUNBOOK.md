@@ -70,7 +70,7 @@ Do these in AWS Console before scripts:
 
 **What:** Prints your G/VT vCPU quota vs what `INSTANCE_TYPE` needs.
 
-**Where:** Mac, from `llm-deploy/`
+**Where:** Mac, from `speculative-decoding/`
 
 ```bash
 bash aws/check_quota.sh
@@ -245,7 +245,7 @@ Paste the summary into **Results** below.
 
 **What:** Terminates the EC2 instance when finished (stops billing for compute).
 
-**Where:** Mac, from `llm-deploy/`
+**Where:** Mac, from `speculative-decoding/`
 
 ```bash
 bash aws/terminate.sh

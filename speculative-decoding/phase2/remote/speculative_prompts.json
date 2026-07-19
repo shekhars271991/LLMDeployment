@@ -1,0 +1,58 @@
+{
+  "prompts": [
+    {
+      "id": "high_copy_paragraph",
+      "cohort": "high_reuse",
+      "category": "copy",
+      "text": "Repeat the following paragraph verbatim. Do not add commentary.\n\nPagedAttention stores KV cache in non-contiguous blocks so vLLM can batch requests with different sequence lengths efficiently. Continuous batching adds new requests without waiting for the whole batch to finish. Prefix caching reuses KV blocks when multiple requests share the same token prefix."
+    },
+    {
+      "id": "high_code_complete",
+      "cohort": "high_reuse",
+      "category": "code",
+      "text": "Complete the function body only. The answer appears in the comment on the last line.\n\ndef clamp(value, low, high):\n    # return max(low, min(value, high))\n    "
+    },
+    {
+      "id": "high_json_to_lines",
+      "cohort": "high_reuse",
+      "category": "format",
+      "text": "Convert this JSON to key=value lines, one per field, in the same order:\n{\"service\":\"vllm\",\"port\":8000,\"status\":\"ok\"}\n\nExample format:\nservice=vllm\nport=8000\nstatus=ok"
+    },
+    {
+      "id": "medium_summarize_bullets",
+      "cohort": "medium_reuse",
+      "category": "summarize",
+      "text": "Summarize these bullets in two sentences:\n- Speculative decoding proposes multiple tokens before verification.\n- The target model accepts or rejects draft tokens.\n- Acceptance rate determines whether latency improves."
+    },
+    {
+      "id": "medium_rewrite_formal",
+      "cohort": "medium_reuse",
+      "category": "rewrite",
+      "text": "Rewrite this sentence in a formal tone:\n\"Our server is kinda slow when the prompts get really long.\""
+    },
+    {
+      "id": "medium_extract_fields",
+      "cohort": "medium_reuse",
+      "category": "extract",
+      "text": "Extract model, ttft_ms, and decode_tok_s from this log line as JSON:\nmodel=qwen3-32b-awq ttft_ms=755 decode_tok_s=36.2"
+    },
+    {
+      "id": "low_math_word",
+      "cohort": "low_reuse",
+      "category": "math",
+      "text": "A train travels 180 km in 3 hours, then 240 km in 4 hours. What is the average speed for the whole trip in km/h? Show steps."
+    },
+    {
+      "id": "low_creative_scene",
+      "cohort": "low_reuse",
+      "category": "creative",
+      "text": "Write an original 120-word scene about a lighthouse keeper who discovers a message in a bottle that contains no words, only coordinates to a place that does not exist on any map."
+    },
+    {
+      "id": "low_logic_puzzle",
+      "cohort": "low_reuse",
+      "category": "reasoning",
+      "text": "Three boxes are labeled Apples, Oranges, and Mixed, but every label is wrong. You may pick one fruit from one box. Which single box should you pick from to relabel all boxes correctly? Explain briefly."
+    }
+  ]
+}
