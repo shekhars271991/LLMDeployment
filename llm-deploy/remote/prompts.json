@@ -1,0 +1,44 @@
+{
+  "prompts": [
+    {
+      "id": "short_qa",
+      "category": "short",
+      "text": "What is the capital of France? Answer in one sentence."
+    },
+    {
+      "id": "short_math",
+      "category": "short",
+      "text": "What is 17 * 23? Show only the final number."
+    },
+    {
+      "id": "short_define",
+      "category": "short",
+      "text": "Define 'latency' in the context of LLM inference in two sentences."
+    },
+    {
+      "id": "medium_summarize",
+      "category": "medium",
+      "text": "Summarize the key tradeoffs between tensor parallelism and pipeline parallelism for serving large language models. Cover when each helps, communication overhead, and typical deployment patterns. Keep the answer under 200 words."
+    },
+    {
+      "id": "medium_code",
+      "category": "medium",
+      "text": "Write a Python function that computes exponential moving average over a list of floats. Include a short docstring and handle an empty list by returning None."
+    },
+    {
+      "id": "long_analysis",
+      "category": "long",
+      "text": "You are evaluating baseline performance for a 32B parameter AWQ model on vLLM. Explain how you would measure time-to-first-token (TTFT), decode tokens per second, and peak VRAM usage in a reproducible way. Describe what fixed parameters must be held constant across runs (max model length, gpu memory utilization, concurrency, prompt set). Discuss how input context length affects prefill vs decode phases. Provide a concise checklist an engineer could follow before comparing speculative decoding or disaggregated serving optimizations against this baseline."
+    },
+    {
+      "id": "long_creative",
+      "category": "long",
+      "text": "Write a 150-word scene set on a space station where an engineer debugs a misbehaving inference cluster at 3am. Mention GPU memory, batching, and a surprising root cause that is configuration-related rather than hardware failure."
+    },
+    {
+      "id": "short_json",
+      "category": "short",
+      "text": "Return a JSON object with keys 'status' and 'message' where status is 'ok' and message is a three-word greeting."
+    }
+  ]
+}
