@@ -6,6 +6,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../common/record.sh
+source "${SCRIPT_DIR}/../common/record.sh"
+start_recording "check_quota" "${SCRIPT_DIR}/../records/aws"
+
 # shellcheck source=config.env
 source "${SCRIPT_DIR}/config.env"
 
@@ -14,16 +18,19 @@ if ! command -v aws &>/dev/null; then
   exit 1
 fi
 
-# vCPUs required per instance type (common picks for this project)
-declare -A INSTANCE_VCPUS=(
-  ["g6e.xlarge"]=4
-  ["g6e.12xlarge"]=48
-  ["g5.12xlarge"]=48
-  ["g5.xlarge"]=4
-  ["g6.xlarge"]=4
-)
+# vCPUs required per instance type (case = portable on macOS bash 3.2)
+lookup_vcpus() {
+  case "$1" in
+    g6e.xlarge)  echo 4 ;;
+    g6e.12xlarge) echo 48 ;;
+    g5.12xlarge) echo 48 ;;
+    g5.xlarge)   echo 4 ;;
+    g6.xlarge)   echo 4 ;;
+    *)           echo unknown ;;
+  esac
+}
 
-REQUIRED="${INSTANCE_VCPUS[${INSTANCE_TYPE}]:-unknown}"
+REQUIRED="$(lookup_vcpus "${INSTANCE_TYPE}")"
 if [[ "${REQUIRED}" == "unknown" ]]; then
   echo "WARN: vCPU count not in script lookup table for ${INSTANCE_TYPE}."
   echo "      Check AWS instance specs and compare to quota below."

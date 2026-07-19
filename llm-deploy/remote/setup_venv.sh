@@ -6,6 +6,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../common/record.sh
+source "${SCRIPT_DIR}/../common/record.sh"
+start_recording "setup_venv" "${SCRIPT_DIR}/records"
+
 # shellcheck source=config.env
 source "${SCRIPT_DIR}/config.env"
 
@@ -17,8 +21,18 @@ fi
 nvidia-smi
 
 echo ""
+echo "=== Python venv prerequisite ==="
+if ! dpkg -s python3-venv &>/dev/null; then
+  echo "python3-venv is missing; installing it with apt ..."
+  sudo apt-get update
+  sudo apt-get install -y python3-venv
+else
+  echo "python3-venv is already installed."
+fi
+
+echo ""
 echo "=== Creating venv at ${VENV_DIR} ==="
-python3 -m venv "${VENV_DIR}"
+python3 -m venv --clear "${VENV_DIR}"
 # shellcheck disable=SC1091
 source "${VENV_DIR}/bin/activate"
 

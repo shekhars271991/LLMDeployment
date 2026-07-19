@@ -4,6 +4,34 @@ Read top-to-bottom. Run one step at a time; record notes in **Results** at the b
 
 **You run everything.** These scripts are small helpers — inspect each before executing.
 
+## Automatic raw records
+
+Shell scripts use `common/record.sh`, and Python scripts use
+`common/recording.py`, to keep console output and save the same stdout/stderr
+to timestamped raw logs automatically:
+
+- Mac/AWS scripts: `records/aws/<timestamp>_<script>.log`
+- EC2/remote scripts: `remote/records/<timestamp>_<script>.log`
+- Benchmark data: `remote/results/bench_<timestamp>.json`
+- Summaries: `remote/results/summary_<timestamp>.txt`
+
+You do not need to copy console output manually. These generated records are
+ignored by Git because they may contain instance IDs, IPs, and verbose logs.
+
+## Local configuration safety
+
+`aws/config.env` and `remote/config.env` are local files ignored by Git.
+Tracked `.example` files contain placeholders only. On a fresh clone:
+
+```bash
+cp aws/config.env.example aws/config.env
+cp remote/config.env.example remote/config.env
+```
+
+Never put AWS credentials, PEM contents, account IDs, VPC/security-group IDs,
+instance IDs, or public IPs in tracked files. `aws/instance.env`, raw records,
+PEM files, benchmark results, and Terraform state are also ignored.
+
 ---
 
 ## Hardware decision (pick before launch)
@@ -70,17 +98,17 @@ bash aws/launch_instance.sh
 
 ---
 
-## Step 3 — Copy `remote/` to the box
+## Step 3 — Copy `remote/` and the recorder to the box
 
-**What:** Copy benchmark scripts to the GPU instance.
+**What:** Copy benchmark scripts and their shared recorder to the GPU instance.
 
 **Prerequisite:** Step 2; replace IP and key path.
 
 ```bash
-scp -r -i ~/.ssh/<key>.pem remote ubuntu@<PUBLIC_IP>:~/
+scp -r -i ~/.ssh/<key>.pem remote common ubuntu@<PUBLIC_IP>:~/
 ```
 
-**Good result:** `~/remote/` exists on the box.
+**Good result:** `~/remote/` and `~/common/` exist on the box.
 
 ---
 
@@ -105,7 +133,8 @@ ssh -i ~/.ssh/<key>.pem ubuntu@<PUBLIC_IP>
 
 ## Step 5 — `remote/setup_venv.sh`
 
-**What:** Fresh venv + `pip install "vllm>=0.8.5"`; prints vLLM version and `nvidia-smi`.
+**What:** Installs `python3-venv` if missing, creates a fresh venv, installs
+`vllm>=0.8.5`, and prints the vLLM version and `nvidia-smi`.
 
 **Where:** EC2 box, in `~/remote/`
 
@@ -130,7 +159,7 @@ source ~/vllm-venv/bin/activate
 bash download_weights.sh
 ```
 
-Optional: `huggingface-cli login` if rate-limited.
+Optional: `hf auth login` if rate-limited.
 
 **Good result:** "Download complete" under `~/hf`.
 
@@ -230,6 +259,8 @@ Type `yes` to confirm.
 
 | Script | One line |
 |--------|----------|
+| `common/record.sh` | Tee shell-script stdout/stderr into timestamped raw logs |
+| `common/recording.py` | Tee Python stdout/stderr into timestamped raw logs |
 | `aws/config.env` | Shared AWS settings — edit before launch |
 | `aws/check_quota.sh` | Check G/VT vCPU quota |
 | `aws/launch_instance.sh` | Launch GPU EC2 instance |

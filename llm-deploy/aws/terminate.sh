@@ -6,6 +6,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../common/record.sh
+source "${SCRIPT_DIR}/../common/record.sh"
+start_recording "terminate" "${SCRIPT_DIR}/../records/aws"
+
 # shellcheck source=config.env
 source "${SCRIPT_DIR}/config.env"
 

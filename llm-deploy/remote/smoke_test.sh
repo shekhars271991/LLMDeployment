@@ -6,6 +6,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../common/record.sh
+source "${SCRIPT_DIR}/../common/record.sh"
+start_recording "smoke_test" "${SCRIPT_DIR}/records"
+
 # shellcheck source=config.env
 source "${SCRIPT_DIR}/config.env"
 
@@ -21,7 +25,8 @@ curl -sf "${BASE}/v1/chat/completions" \
   -d "{
     \"model\": \"${SERVED_MODEL_NAME}\",
     \"messages\": [{\"role\": \"user\", \"content\": \"Say hi in one short sentence.\"}],
-    \"max_tokens\": 32
+    \"max_tokens\": 32,
+    \"chat_template_kwargs\": {\"enable_thinking\": false}
   }" | python3 -m json.tool
 
 echo ""

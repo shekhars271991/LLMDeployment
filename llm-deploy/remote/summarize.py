@@ -11,6 +11,7 @@ Prints table to stdout and writes results/summary_<timestamp>.txt
 from __future__ import annotations
 
 import json
+import os
 import statistics
 import subprocess
 import sys
@@ -20,6 +21,11 @@ from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 RESULTS_DIR = SCRIPT_DIR / "results"
+
+sys.path.insert(0, str(SCRIPT_DIR.parent / "common"))
+from recording import start_recording  # noqa: E402
+
+start_recording("summarize", SCRIPT_DIR / "records")
 
 
 def latest_bench_file() -> Path | None:
@@ -38,12 +44,20 @@ def gpu_info() -> str:
         return "unknown"
 
 
-def vllm_version() -> str:
+def vllm_version(cfg: dict[str, str]) -> str:
+    venv_dir = os.path.expanduser(os.path.expandvars(cfg.get("VENV_DIR", "")))
+    venv_python = Path(venv_dir) / "bin" / "python"
     try:
-        import vllm  # noqa: PLC0415
-
-        return vllm.__version__
-    except Exception:  # noqa: BLE001
+        return subprocess.check_output(
+            [
+                str(venv_python),
+                "-c",
+                "from importlib.metadata import version; print(version('vllm'))",
+            ],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
         return "unknown"
 
 
@@ -132,7 +146,7 @@ def main() -> int:
     meta = {
         "timestamp": run.get("timestamp"),
         "model": run.get("model"),
-        "vllm_version": vllm_version(),
+        "vllm_version": vllm_version(cfg),
         "gpu": gpu_info(),
         "config": {**run.get("config", {}), **{k: cfg.get(k) for k in ("TP", "MAXLEN", "GPU_MEM_UTIL")}},
         "source_file": str(bench_path.name),

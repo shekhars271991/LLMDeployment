@@ -34,13 +34,22 @@ llm-deploy/remote/results/*
 # AWS runtime state (instance id / IP from launch_instance.sh)
 llm-deploy/aws/instance.env
 
-# Secrets — never commit keys or filled-in local overrides
+# Local configuration — templates (*.example) are tracked instead
+llm-deploy/aws/config.env
+llm-deploy/remote/config.env
+**/config.local.env
+
+# Secrets — never commit credentials, keys, or filled-in environment files
 *.pem
 *.key
 .env
 .env.*
 !.env.example
-**/config.local.env
+*.tfvars
+*.tfstate
+*.tfstate.*
 
 # Logs
 *.log
+llm-deploy/records/
+llm-deploy/remote/records/

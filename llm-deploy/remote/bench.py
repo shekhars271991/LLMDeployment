@@ -29,12 +29,12 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 RESULTS_DIR = SCRIPT_DIR / "results"
 PROMPTS_FILE = SCRIPT_DIR / "prompts.json"
 
-# Approximate chars per token for padding (good enough for baseline sweeps)
-CHARS_PER_TOKEN = 4
-FILLER = (
-    "The following padding text is used only to increase input context length "
-    "for baseline benchmarking and should be ignored. "
-)
+sys.path.insert(0, str(SCRIPT_DIR.parent / "common"))
+from recording import start_recording  # noqa: E402
+
+start_recording("bench", SCRIPT_DIR / "records")
+
+FILLER_TOKEN = " padding"
 
 
 def load_config_env() -> dict[str, str]:
@@ -52,21 +52,67 @@ def load_config_env() -> dict[str, str]:
             continue
         key, _, val = line.partition("=")
         val = val.strip().strip('"').strip("'")
+        val = os.path.expandvars(val)
         cfg[key.strip()] = val
         os.environ.setdefault(key.strip(), val)
     return cfg
 
 
-def pad_prompt(prompt: str, target_input_tokens: int) -> str:
-    """Pad prompt upward toward target_input_tokens using filler text."""
-    current_est = max(1, len(prompt) // CHARS_PER_TOKEN)
-    if current_est >= target_input_tokens:
-        return prompt
-    need_tokens = target_input_tokens - current_est
-    need_chars = need_tokens * CHARS_PER_TOKEN
-    repeats = (need_chars // len(FILLER)) + 1
-    padding = (FILLER * repeats)[:need_chars]
-    return f"{padding}\n\n{prompt}"
+def tokenize_chat(api_base: str, model: str, content: str) -> int:
+    """Return the exact chat-formatted input length reported by vLLM."""
+    api_root = api_base.rstrip("/")
+    if api_root.endswith("/v1"):
+        api_root = api_root[:-3]
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": content}],
+        "chat_template_kwargs": {"enable_thinking": False},
+    }
+    request = urllib.request.Request(
+        f"{api_root}/tokenize",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=60) as response:
+        return int(json.load(response)["count"])
+
+
+def pad_prompt(
+    api_base: str,
+    model: str,
+    prompt_id: str,
+    prompt: str,
+    target_input_tokens: int,
+) -> tuple[str, int]:
+    """Create a unique prompt with exactly target_input_tokens after templating."""
+    base = (
+        f"Benchmark case: {prompt_id}-{target_input_tokens}\n\n"
+        f"{prompt}\n\n"
+        "Ignore the following padding text:"
+    )
+    base_tokens = tokenize_chat(api_base, model, base)
+    if base_tokens > target_input_tokens:
+        raise ValueError(
+            f"{prompt_id} requires {base_tokens} tokens before padding, "
+            f"which exceeds target {target_input_tokens}"
+        )
+
+    repeats = target_input_tokens - base_tokens
+    seen: set[int] = set()
+    for _ in range(20):
+        candidate = base + (FILLER_TOKEN * repeats)
+        actual = tokenize_chat(api_base, model, candidate)
+        if actual == target_input_tokens:
+            return candidate, actual
+        if repeats in seen:
+            break
+        seen.add(repeats)
+        repeats = max(0, repeats + target_input_tokens - actual)
+
+    raise RuntimeError(
+        f"Could not pad {prompt_id} to exactly {target_input_tokens} tokens"
+    )
 
 
 class VramSampler:
@@ -216,6 +262,23 @@ def main() -> int:
         if x.strip()
     ]
 
+    if "${" in api_base:
+        print(
+            f"ERROR: BENCH_API_BASE contains an unexpanded variable: {api_base}",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
+        with urllib.request.urlopen(
+            f"{api_base.rstrip('/')}/models", timeout=10
+        ) as response:
+            if response.status != 200:
+                raise RuntimeError(f"HTTP {response.status}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"ERROR: vLLM API preflight failed at {api_base}: {exc}", file=sys.stderr)
+        return 1
+
     if not PROMPTS_FILE.exists():
         print(f"ERROR: {PROMPTS_FILE} not found", file=sys.stderr)
         return 1
@@ -246,10 +309,16 @@ def main() -> int:
     print("Concurrency: 1 (sequential)\n")
 
     for ctx in context_lengths:
-        print(f"--- context target ~{ctx} tokens ---")
+        print(f"--- input length {ctx} tokens ---")
         for p in prompts:
             pid = p["id"]
-            padded = pad_prompt(p["text"], ctx)
+            try:
+                padded, prepared_tokens = pad_prompt(
+                    api_base, model, pid, p["text"], ctx
+                )
+            except Exception as exc:  # noqa: BLE001
+                print(f"ERROR preparing {pid} @ ctx={ctx}: {exc}", file=sys.stderr)
+                return 1
             print(f"  {pid} @ ctx={ctx} ... ", end="", flush=True)
 
             sampler = VramSampler()
@@ -261,9 +330,9 @@ def main() -> int:
 
             decode_tok_s: float | None = None
             comp = usage.get("completion_tokens")
-            if ttft_ms is not None and comp and comp > 0:
+            if ttft_ms is not None and comp and comp > 1:
                 decode_sec = max(1e-9, (total_ms - ttft_ms) / 1000)
-                decode_tok_s = comp / decode_sec
+                decode_tok_s = (comp - 1) / decode_sec
 
             rr = RequestResult(
                 prompt_id=pid,
@@ -284,7 +353,16 @@ def main() -> int:
                 print(f"ERROR: {err}")
             elif ttft_ms is not None:
                 dts = f"{decode_tok_s:.1f}" if decode_tok_s else "n/a"
-                print(f"TTFT={ttft_ms:.0f}ms decode={dts} tok/s VRAM={peak_mib}MiB")
+                actual_tokens = usage.get("prompt_tokens")
+                token_note = (
+                    str(actual_tokens)
+                    if actual_tokens is not None
+                    else f"{prepared_tokens} prepared"
+                )
+                print(
+                    f"input={token_note} TTFT={ttft_ms:.0f}ms "
+                    f"decode={dts} tok/s VRAM={peak_mib}MiB"
+                )
             else:
                 print("no tokens received")
 

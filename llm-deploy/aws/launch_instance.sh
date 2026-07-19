@@ -7,6 +7,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../common/record.sh
+source "${SCRIPT_DIR}/../common/record.sh"
+start_recording "launch_instance" "${SCRIPT_DIR}/../records/aws"
+
 # shellcheck source=config.env
 source "${SCRIPT_DIR}/config.env"
 
@@ -47,6 +51,8 @@ echo "InstanceId: ${INSTANCE_ID}"
 echo "Waiting for instance to be running ..."
 
 aws ec2 wait instance-running --region "${AWS_REGION}" --instance-ids "${INSTANCE_ID}"
+echo "Waiting for EC2 system and instance status checks ..."
+aws ec2 wait instance-status-ok --region "${AWS_REGION}" --instance-ids "${INSTANCE_ID}"
 
 PUBLIC_IP="$(aws ec2 describe-instances \
   --region "${AWS_REGION}" \
@@ -70,6 +76,7 @@ echo "PUBLIC_IP=${PUBLIC_IP}"
 echo "Saved to: ${INSTANCE_ENV}"
 echo ""
 echo "Next:"
-echo "  1. bash aws/ssh_tunnel.sh   (or ssh manually)"
-echo "  2. scp -r -i ${SSH_KEY_PATH} remote ${SSH_USER}@${PUBLIC_IP}:~/"
-echo "  3. Follow RUNBOOK.md on the remote box"
+echo "  1. Wait until EC2 status checks pass."
+echo "  2. scp -r -i ${SSH_KEY_PATH} ${SCRIPT_DIR}/../remote ${SCRIPT_DIR}/../common ${SSH_USER}@${PUBLIC_IP}:~/"
+echo "  3. bash ${SCRIPT_DIR}/ssh_tunnel.sh"
+echo "  4. Follow RUNBOOK.md on the remote box."
