@@ -23,10 +23,12 @@ Detailed reports: [Phase 1 baseline](phase1/phase1_baseline_results.txt) ·
 
 ## Phase 2 — Speculative Decoding
 
-Decode speedup vs the Phase 1-style control, by aggregate input length:
+Decode speedup vs the Phase 1-style control, by aggregate input length. The token
+columns are **decode speedup %** (higher tok/s than control; e.g. `+101.7%` ≈ 2× faster
+decode). "Acceptance" is the share of drafted tokens the target model accepted.
 
-| Mode | Acceptance | 256 | 2,048 | 8,000 |
-|------|-----------:|----:|------:|------:|
+| Mode | Acceptance | Decode speedup @ 256 tok | @ 2,048 tok | @ 8,000 tok |
+|------|-----------:|-------------------------:|------------:|------------:|
 | ngram-2 | 52.5% | +19.8% | +12.0% | +8.2% |
 | ngram-4 | 37.8% | +24.5% | +14.2% | +15.2% |
 | ngram-8 | 23.5% | +26.6% | +16.3% | +16.7% |
@@ -35,7 +37,7 @@ Decode speedup vs the Phase 1-style control, by aggregate input length:
 Median TTFT (ms) — speculation optimizes *decode*, not prefill, so it adds a small
 TTFT cost rather than reducing it:
 
-| Mode | 256 | 2,048 | 8,000 |
+| Mode | 256 Tokens | 2,048 Tokens | 8,000 Tokens |
 |------|----:|------:|------:|
 | control | 101.9 | 747.6 | 3,361.8 |
 | ngram-2 | 117.6 | 751.9 | 3,352.0 |
