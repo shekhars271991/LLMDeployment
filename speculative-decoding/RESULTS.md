@@ -32,6 +32,17 @@ Decode speedup vs the Phase 1-style control, by aggregate input length:
 | ngram-8 | 23.5% | +26.6% | +16.3% | +16.7% |
 | draft (Qwen3-0.6B, 5 tok) | 45.4% | +101.7% | +105.8% | +90.3% |
 
+Median TTFT (ms) — speculation optimizes *decode*, not prefill, so it adds a small
+TTFT cost rather than reducing it:
+
+| Mode | 256 | 2,048 | 8,000 |
+|------|----:|------:|------:|
+| control | 101.9 | 747.6 | 3,361.8 |
+| ngram-2 | 117.6 | 751.9 | 3,352.0 |
+| ngram-4 | 117.8 | 746.4 | 3,362.4 |
+| ngram-8 | 117.7 | 743.9 | 3,359.8 |
+| draft (Qwen3-0.6B, 5 tok) | 148.7 | 830.1 | 3,497.2 |
+
 Best mode per workload cohort (decode change vs control):
 
 | Cohort | 256 | 2,048 | 8,000 |
