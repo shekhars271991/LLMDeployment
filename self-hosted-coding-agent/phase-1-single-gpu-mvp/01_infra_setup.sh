@@ -1,0 +1,159 @@
+#!/usr/bin/env bash
+# 01_infra_setup.sh — Provision ONE EC2 GPU instance for Phase 1 (single-GPU MVP).
+#
+# WHAT IT DOES: launches a single g6e.2xlarge (1x NVIDIA L40S 48 GB) on-demand
+# instance, waits for it to pass status checks, fetches its public IP, and writes
+# instance.env next to this script. This is a self-contained, one-shot launcher.
+#
+# WHERE TO RUN: on your LOCAL Mac, with the `aws` CLI installed and configured
+# (aws configure / SSO). It does NOT run on the GPU box.
+#
+# Edit the CONFIG block below (REPLACE_ME values) before running:
+#   bash 01_infra_setup.sh
+
+set -euo pipefail
+
+# ==== CONFIG (edit me) ====
+AWS_REGION="us-east-1"
+export AWS_DEFAULT_REGION="${AWS_REGION}"
+
+INSTANCE_TYPE="g6e.2xlarge"                 # 1x NVIDIA L40S 48 GB, 8 vCPU, single node
+
+# Region-specific Deep Learning OSS Nvidia Driver AMI (Ubuntu 22.04).
+# Find one with:
+#   aws ec2 describe-images --region us-east-1 --owners amazon \
+#     --filters 'Name=name,Values=Deep Learning OSS Nvidia Driver AMI GPU PyTorch* (Ubuntu 22.04)*' \
+#     --query 'reverse(sort_by(Images,&CreationDate))[:1].[ImageId,Name]' --output text
+AMI_ID="ami-0f14e146be5a0b944"   # us-east-1 Deep Learning OSS Nvidia Driver AMI (Ubuntu 22.04); same as speculative-decoding project
+
+KEY_NAME="skrgpuuseast"                       # existing EC2 key-pair name (same as speculative-decoding project)
+SSH_KEY_PATH="${HOME}/.ssh/${KEY_NAME}.pem"  # local path to the matching private key
+
+# Security group (same as speculative-decoding project). NOTE: this is a permissive
+# temporary training group (all TCP open to 0.0.0.0/0). Fine for a short-lived run;
+# for real use, tighten to SSH/22 from your IP only and reach vLLM via an SSH tunnel.
+SG_ID="sg-09c9aa5873bbd5f48"
+
+SUBNET_ID=""                                 # leave empty to let EC2 pick a default subnet
+ROOT_VOLUME_GB=300                           # room for FP8 weights (~35GB) + SWE-bench docker images
+INSTANCE_NAME_TAG="coding-agent-phase1-qwen36-35b"
+SSH_USER="ubuntu"
+# ==== END CONFIG ====
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# ---- inline recording (tee stdout/stderr to a timestamped log under records/) ----
+TS="$(date -u +"%Y%m%dT%H%M%SZ")"
+RECORD_DIR="${SCRIPT_DIR}/records"
+mkdir -p "${RECORD_DIR}"
+RAW_RECORD_FILE="${RECORD_DIR}/${TS}_infra_setup.log"
+exec > >(tee -a "${RAW_RECORD_FILE}") 2>&1
+echo "record_name=infra_setup"
+echo "started_utc=${TS}"
+echo "host=$(hostname)"
+echo "command=$0 $*"
+echo "--- output ---"
+_finish_recording() {
+  local status=$?
+  trap - EXIT
+  echo "--- end ---"
+  echo "finished_utc=$(date -u +"%Y%m%dT%H%M%SZ")"
+  echo "exit_status=${status}"
+  echo "raw_record=${RAW_RECORD_FILE}"
+  exit "${status}"
+}
+trap _finish_recording EXIT
+# ---- end inline recording ----
+
+INSTANCE_ENV="${SCRIPT_DIR}/instance.env"
+
+echo "=== Preflight checks ==="
+for var in AMI_ID KEY_NAME SG_ID; do
+  if [[ "${!var}" == *"REPLACE_ME"* ]]; then
+    echo "ERROR: Set ${var} in the CONFIG block (still contains REPLACE_ME)."
+    exit 1
+  fi
+done
+
+if ! command -v aws &>/dev/null; then
+  echo "ERROR: aws CLI not found. Install and run 'aws configure' first."
+  exit 1
+fi
+
+# Optional, non-fatal: show current On-Demand G/VT vCPU quota. g6e.2xlarge needs 8 vCPUs.
+if command -v aws &>/dev/null; then
+  echo ""
+  echo "=== On-Demand G and VT vCPU quota (informational) ==="
+  echo "(g6e.2xlarge needs 8 vCPUs of 'Running On-Demand G and VT instances' quota)"
+  aws service-quotas get-service-quota \
+    --region "${AWS_REGION}" \
+    --service-code ec2 \
+    --quota-code L-DB2E81BA \
+    --query 'Quota.Value' --output text 2>/dev/null \
+    | awk '{print "Current G/VT vCPU quota:", $0}' || true
+fi
+
+echo ""
+echo "=== Launching ${INSTANCE_TYPE} in ${AWS_REGION} ==="
+
+RUN_ARGS=(
+  --region "${AWS_REGION}"
+  --image-id "${AMI_ID}"
+  --instance-type "${INSTANCE_TYPE}"
+  --key-name "${KEY_NAME}"
+  --security-group-ids "${SG_ID}"
+  --block-device-mappings "[{\"DeviceName\":\"/dev/sda1\",\"Ebs\":{\"VolumeSize\":${ROOT_VOLUME_GB},\"VolumeType\":\"gp3\",\"DeleteOnTermination\":true}}]"
+  --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${INSTANCE_NAME_TAG}}]"
+  --count 1
+)
+
+if [[ -n "${SUBNET_ID}" ]]; then
+  RUN_ARGS+=(--subnet-id "${SUBNET_ID}")
+fi
+
+INSTANCE_ID="$(aws ec2 run-instances "${RUN_ARGS[@]}" --query 'Instances[0].InstanceId' --output text)"
+echo "InstanceId: ${INSTANCE_ID}"
+
+echo "Waiting for instance to be running ..."
+aws ec2 wait instance-running --region "${AWS_REGION}" --instance-ids "${INSTANCE_ID}"
+
+echo "Waiting for EC2 system and instance status checks (this can take a few minutes) ..."
+aws ec2 wait instance-status-ok --region "${AWS_REGION}" --instance-ids "${INSTANCE_ID}"
+
+PUBLIC_IP="$(aws ec2 describe-instances \
+  --region "${AWS_REGION}" \
+  --instance-ids "${INSTANCE_ID}" \
+  --query 'Reservations[0].Instances[0].PublicIpAddress' \
+  --output text)"
+
+cat > "${INSTANCE_ENV}" <<EOF
+# Generated by 01_infra_setup.sh — do NOT commit (contains a public IP).
+export INSTANCE_ID="${INSTANCE_ID}"
+export INSTANCE_PUBLIC_IP="${PUBLIC_IP}"
+export AWS_REGION="${AWS_REGION}"
+export INSTANCE_TYPE="${INSTANCE_TYPE}"
+export SSH_USER="${SSH_USER}"
+export SSH_KEY_PATH="${SSH_KEY_PATH}"
+EOF
+
+echo ""
+echo "=== Launch complete ==="
+echo "INSTANCE_ID=${INSTANCE_ID}"
+echo "PUBLIC_IP=${PUBLIC_IP}"
+echo "Saved to: ${INSTANCE_ENV}"
+echo ""
+echo "=== Next steps ==="
+echo "# 1) Copy the serve + benchmark scripts to the box:"
+echo "scp -i \"${SSH_KEY_PATH}\" ${SCRIPT_DIR}/02_serve_vllm.sh ${SCRIPT_DIR}/03_run_benchmark.sh ${SSH_USER}@${PUBLIC_IP}:~/"
+echo ""
+echo "# 2) SSH in and start the server (BLOCKS — use tmux or a dedicated terminal):"
+echo "ssh -i \"${SSH_KEY_PATH}\" ${SSH_USER}@${PUBLIC_IP}"
+echo "#    then, on the box:"
+echo "bash 02_serve_vllm.sh    # wait for 'Application startup complete'"
+echo ""
+echo "# 3) In a SECOND terminal on the box, run the benchmark:"
+echo "bash 03_run_benchmark.sh"
+echo ""
+echo "# 4) To reach the endpoint from your Mac (port 8000 is NOT open publicly), tunnel:"
+echo "ssh -i \"${SSH_KEY_PATH}\" -L 8000:localhost:8000 ${SSH_USER}@${PUBLIC_IP}"
+echo "#    then use http://127.0.0.1:8000/v1 locally."

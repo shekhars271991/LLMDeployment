@@ -53,3 +53,11 @@ speculative-decoding/phase*/remote/config.env
 *.log
 speculative-decoding/records/
 speculative-decoding/phase*/remote/records/
+
+# Self-hosted coding-agent phases: generated runtime state (never commit)
+# instance.env contains a public IP; registry.json is a generated litellm registry;
+# records/ and downloaded-results/ are timestamped run logs + result JSON.
+self-hosted-coding-agent/phase-*/instance.env
+self-hosted-coding-agent/phase-*/registry.json
+self-hosted-coding-agent/phase-*/records/
+self-hosted-coding-agent/phase-*/downloaded-results/
