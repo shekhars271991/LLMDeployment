@@ -17,11 +17,17 @@ set -euo pipefail
 MODEL_ID="Qwen/Qwen3.6-35B-A3B-FP8"
 SERVED_MODEL_NAME="qwen3.6-35b-a3b-fp8"
 
-# FP8 weights are ~35GB; on a 48GB L40S that leaves a limited KV budget.
-# Raise/lower MAXLEN to fit (see reference.md precision table).
-MAXLEN=32768
+# FP8 weights are ~35GB; on a 48GB L40S that leaves ~10-13GB for KV (see reference.md).
+# We raise MAXLEN to 65536 (from 32768) to stop agentic runs overflowing the window
+# (reasoning traces + big file observations inflate KV 2-10x). Two things make this fit:
+#   - KV_CACHE_DTYPE=fp8 roughly halves KV memory (~2x effective context).
+#   - MAX_NUM_SEQS lowered to 8 so a single long sequence's KV actually allocates.
+# The model is hybrid-attention (Gated DeltaNet linear layers) so KV grows sub-linearly.
+# If vLLM logs a KV/OOM error at startup, lower MAXLEN (49152) or MAX_NUM_SEQS first.
+MAXLEN=65536
 GPU_MEM_UTIL=0.92
-MAX_NUM_SEQS=16
+MAX_NUM_SEQS=8
+KV_CACHE_DTYPE=fp8
 PORT=8000
 
 VENV_DIR="${HOME}/vllm-venv"
@@ -117,7 +123,7 @@ hf download "${MODEL_ID}"
 echo ""
 echo "=== vLLM serve (reasoning ON) ==="
 echo "Model: ${MODEL_ID} (served as ${SERVED_MODEL_NAME})"
-echo "MAXLEN=${MAXLEN} GPU_MEM_UTIL=${GPU_MEM_UTIL} MAX_NUM_SEQS=${MAX_NUM_SEQS} PORT=${PORT}"
+echo "MAXLEN=${MAXLEN} GPU_MEM_UTIL=${GPU_MEM_UTIL} MAX_NUM_SEQS=${MAX_NUM_SEQS} KV_CACHE_DTYPE=${KV_CACHE_DTYPE} PORT=${PORT}"
 echo "Reasoning is ON (--reasoning-parser qwen3). Endpoint will be at http://127.0.0.1:${PORT}/v1"
 echo "This command BLOCKS — wait for 'Application startup complete'."
 echo ""
@@ -128,6 +134,7 @@ exec vllm serve "${MODEL_ID}" \
   --max-model-len "${MAXLEN}" \
   --gpu-memory-utilization "${GPU_MEM_UTIL}" \
   --max-num-seqs "${MAX_NUM_SEQS}" \
+  --kv-cache-dtype "${KV_CACHE_DTYPE}" \
   --enable-prefix-caching \
   --reasoning-parser qwen3 \
   --enable-auto-tool-choice \

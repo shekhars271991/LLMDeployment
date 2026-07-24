@@ -30,7 +30,13 @@ SUBSET="lite"           # `lite` for fast iteration, `verified` for the headline
 SPLIT="test"
 INSTANCE_LIMIT="5"      # small smoke slice first; set empty or 0 to run the full subset
 WORKERS="4"
-MAX_MODEL_TOKENS="64000"
+# IMPORTANT: keep in sync with the vLLM server's --max-model-len in 02_serve_vllm.sh (65536).
+# The earlier ContextWindowExceededError was caused by advertising 64000 here while the server
+# only allowed 32768 — the agent thought it had headroom it didn't and never trimmed, so the
+# server rejected the request. We now advertise the real context and reserve room for output.
+MAX_MODEL_TOKENS="65536"
+MAX_OUTPUT_TOKENS="8192"   # generation reserve; input is capped at MAX_MODEL_TOKENS - this
+MAX_INPUT_TOKENS="$(( MAX_MODEL_TOKENS - MAX_OUTPUT_TOKENS ))"
 
 BENCH_VENV_DIR="${HOME}/bench-venv"
 # ==== END CONFIG ====
@@ -111,8 +117,8 @@ cat > "${REGISTRY_PATH}" <<EOF
 {
   "${SERVED_MODEL_NAME}": {
     "max_tokens": ${MAX_MODEL_TOKENS},
-    "max_input_tokens": ${MAX_MODEL_TOKENS},
-    "max_output_tokens": ${MAX_MODEL_TOKENS},
+    "max_input_tokens": ${MAX_INPUT_TOKENS},
+    "max_output_tokens": ${MAX_OUTPUT_TOKENS},
     "input_cost_per_token": 0.0,
     "output_cost_per_token": 0.0,
     "litellm_provider": "hosted_vllm",
@@ -126,7 +132,11 @@ export LITELLM_MODEL_REGISTRY_PATH="${REGISTRY_PATH}"
 export OPENAI_API_KEY="dummy"
 export HOSTED_VLLM_API_BASE="${API_BASE}"
 export OPENAI_BASE_URL="${API_BASE}"
-echo "Wrote ${REGISTRY_PATH} (LITELLM_MODEL_REGISTRY_PATH set)."
+# Self-hosted model is free -> per-token cost is 0.0 in registry.json. mini-swe-agent's
+# default cost tracking treats a 0.0 cost as "unregistered" and aborts every task with
+# "RuntimeError: Cost must be > 0.0". Tell it to ignore cost-tracking errors.
+export MSWEA_COST_TRACKING="ignore_errors"
+echo "Wrote ${REGISTRY_PATH} (LITELLM_MODEL_REGISTRY_PATH set; MSWEA_COST_TRACKING=ignore_errors)."
 
 OUT_DIR="${RESULTS_DIR}/run_${TS}"
 mkdir -p "${OUT_DIR}"
@@ -167,6 +177,8 @@ if [[ -z "${PREDICTIONS_PATH:-}" || ! -f "${PREDICTIONS_PATH}" ]]; then
   exit 1
 fi
 echo "Predictions: ${PREDICTIONS_PATH}"
+PRED_COUNT="$(python3 -c "import json,sys; print(len(json.load(open(sys.argv[1]))))" "${PREDICTIONS_PATH}" 2>/dev/null || echo 0)"
+echo "Predictions submitted: ${PRED_COUNT}"
 
 RUN_ID="phase1_${TS}"
 echo ""
@@ -201,7 +213,7 @@ summary = {
     "subset": "${SUBSET}",
     "split": "${SPLIT}",
     "dataset": "${DATASET}",
-    "instances_attempted": None,
+    "instances_attempted": ${PRED_COUNT},
     "resolved": None,
     "resolve_rate_pct": None,
     "config": {
@@ -225,6 +237,8 @@ report_path, summary_path = sys.argv[1], sys.argv[2]
 with open(report_path) as f:
     report = json.load(f)
 
+pred_count = ${PRED_COUNT}
+
 def find_int(keys):
     for k in keys:
         v = report.get(k)
@@ -236,7 +250,7 @@ def find_int(keys):
 
 resolved = find_int(["resolved_instances", "resolved"])
 total = find_int(["total_instances", "submitted_instances", "total"])
-rate = round(100.0 * resolved / total, 2) if resolved is not None and total else None
+rate = round(100.0 * resolved / pred_count, 2) if resolved is not None and pred_count else None
 
 summary = {
     "timestamp_utc": "${TS}",
@@ -245,7 +259,8 @@ summary = {
     "subset": "${SUBSET}",
     "split": "${SPLIT}",
     "dataset": "${DATASET}",
-    "instances_attempted": total,
+    "instances_attempted": pred_count,
+    "dataset_total": total,
     "resolved": resolved,
     "resolve_rate_pct": rate,
     "config": {
@@ -259,7 +274,7 @@ summary = {
 with open(summary_path, "w") as f:
     json.dump(summary, f, indent=2)
 
-print(f"resolved={resolved} total={total} resolve_rate={rate}%")
+print(f"resolved={resolved} attempted={pred_count} dataset_total={total} resolve_rate={rate}%")
 print("Wrote summary:", summary_path)
 PY
 fi
